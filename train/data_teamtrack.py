@@ -7,10 +7,12 @@ Args:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import cv2
 import numpy as np
+from tqdm import tqdm
 
 from utils import expand_bbox_to_aspect
 
@@ -114,8 +116,12 @@ def vis_frame(frame, detect_boxes, gt_box):
     return frame
 
 
-def process_clip(video_file, anno_file, output_dir):
+def process_clip(video_file, anno_file, output_dir, start_i):
     """
+    Process frames and GT of a single video, saving to output.
+
+    start_i: Global index to start on for writing files.
+    return: Number of frames processed.
     """
     video = cv2.VideoCapture(video_file)
     bboxes = read_anno_file(anno_file)
@@ -130,9 +136,17 @@ def process_clip(video_file, anno_file, output_dir):
 
         gt_box = compute_gt(bboxes[frame_i])
 
-        if True:
+        if False:
             cv2.imshow("a", vis_frame(frame, bboxes[frame_i], gt_box))
             cv2.waitKey(100)
+
+        # Write to output.
+        frame = cv2.resize(frame, None, fx=0.5, fy=0.5)
+
+        index = start_i + frame_i
+        cv2.imwrite(str(output_dir / f"{index}.jpg"), frame)
+        with open(output_dir / f"{index}.json", "w") as fp:
+            json.dump({"bbox": gt_box}, fp)
 
         frame_i += 1
 
@@ -141,24 +155,32 @@ def process_clip(video_file, anno_file, output_dir):
               f"video_file={video_file}, anno_file={anno_file}\n"
               f"video_len={frame_i}, anno_len={len(bboxes)}")
 
+    return frame_i
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("data", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
+    args.output.mkdir(parents=True, exist_ok=True)
+
+    print("Processing teamtrack data.")
+    print(f"  input dir: {args.data}")
+    print(f"  output dir: {args.output}")
 
     videos_dir = args.data / "videos"
     annos_dir = args.data / "annotations"
-    for file in videos_dir.iterdir():
+
+    frame_index = 0
+    for file in tqdm(videos_dir.iterdir()):
         if file.suffix != ".mp4":
             continue
         anno_file = annos_dir / f"{file.stem}.csv"
         if not anno_file.exists():
             continue
 
-        process_clip(file, anno_file, args.output)
-
+        frame_index += process_clip(file, anno_file, args.output, frame_index)
         break
 
 
