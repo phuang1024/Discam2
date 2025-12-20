@@ -22,7 +22,7 @@ def read_anno_file(anno_file) -> list[list[tuple]]:
     # Remove key names.
     lines = lines[4:]
 
-    # List of lists of tuples (x, y, w, h)
+    # List of lists of tuples (x1, y1, x2, y2)
     bboxes = []
     for line in lines:
         values = list(map(float, line.strip().split(",")))
@@ -32,7 +32,7 @@ def read_anno_file(anno_file) -> list[list[tuple]]:
         bboxes.append([])
         for i in range(0, len(values), 4):
             bbox = values[i : i+4]
-            bboxes[-1].append((bbox[1], bbox[2], bbox[3], bbox[0]))
+            bboxes[-1].append((bbox[1], bbox[2], bbox[1] + bbox[3], bbox[2] + bbox[0]))
 
     return bboxes
 
@@ -50,12 +50,12 @@ def compute_gt(bboxes, z_thres=1.5):
     to either the mean of all detections, or the ball.
 
     z_thres: `(value - mean) / std <= z_thres` to be considered within GT bbox.
-    return: (x, y, w, h) of GT bbox.
+    return: (x1, y1, x2, y2) of GT bbox.
     """
     # List of centers of each bbox.
     centers = []
-    for x, y, w, h in bboxes:
-        centers.append((x + w/2, y + h/2))
+    for x1, y1, x2, y2 in bboxes:
+        centers.append(((x1 + x2) / 2, (y1 + y2) / 2))
     centers = np.array(centers)
 
     # Find mean and std of each axis.
@@ -78,7 +78,7 @@ def compute_gt(bboxes, z_thres=1.5):
             y_min = min(y_min, y)
             y_max = max(y_max, y)
 
-    return (x_min, y_min, x_max - x_min, y_max - y_min)
+    return (x_min, y_min, x_max, y_max)
 
 
 def vis_frame(frame, detect_boxes, gt_box):
@@ -89,8 +89,8 @@ def vis_frame(frame, detect_boxes, gt_box):
     bboxes: Bboxes for this frame; i.e. bboxes[i].
     """
     def draw_rect(frame, box, color):
-        x, y, w, h = map(int, box)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+        x1, y1, x2, y2 = map(int, box)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
     frame = frame.copy()
 
