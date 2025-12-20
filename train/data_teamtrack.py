@@ -12,6 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from utils import expand_bbox_to_aspect
+
 
 def read_anno_file(anno_file) -> list[list[tuple]]:
     """
@@ -37,7 +39,7 @@ def read_anno_file(anno_file) -> list[list[tuple]]:
     return bboxes
 
 
-def compute_gt(bboxes, z_thres=1.5):
+def compute_gt(bboxes, z_thres=1.5, aspect=1920/1080):
     """
     Compute ground truth bbox (i.e. where the PTZ camera should be looking at)
     given all detection bboxes for a frame,
@@ -50,6 +52,7 @@ def compute_gt(bboxes, z_thres=1.5):
     to either the mean of all detections, or the ball.
 
     z_thres: `(value - mean) / std <= z_thres` to be considered within GT bbox.
+    aspect: Output aspect ratio.
     return: (x1, y1, x2, y2) of GT bbox.
     """
     # List of centers of each bbox.
@@ -78,7 +81,8 @@ def compute_gt(bboxes, z_thres=1.5):
             y_min = min(y_min, y)
             y_max = max(y_max, y)
 
-    return (x_min, y_min, x_max, y_max)
+    bbox = expand_bbox_to_aspect((x_min, y_min, x_max, y_max), aspect)
+    return bbox
 
 
 def vis_frame(frame, detect_boxes, gt_box):
