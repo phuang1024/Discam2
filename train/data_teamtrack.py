@@ -29,13 +29,17 @@ def read_anno_file(anno_file) -> list[list[tuple]]:
     # List of lists of tuples (x1, y1, x2, y2)
     bboxes = []
     for line in lines:
-        values = list(map(float, line.strip().split(",")))
+        values = line.strip().split(",")
         values = values[1:]
         assert len(values) % 4 == 0
 
         bboxes.append([])
         for i in range(0, len(values), 4):
             bbox = values[i : i+4]
+            try:
+                bbox = list(map(float, bbox))
+            except ValueError:
+                continue
             bboxes[-1].append((bbox[1], bbox[2], bbox[1] + bbox[3], bbox[2] + bbox[0]))
 
     return bboxes
@@ -192,15 +196,16 @@ def main():
     annos_dir = args.data / "annotations"
 
     frame_index = 0
-    for file in tqdm(videos_dir.iterdir()):
+    for file in tqdm(list(videos_dir.iterdir())):
         if file.suffix != ".mp4":
             continue
         anno_file = annos_dir / f"{file.stem}.csv"
         if not anno_file.exists():
             continue
 
+        print("Processing", file)
+
         frame_index += process_clip(file, anno_file, args.output, frame_index)
-        break
 
 
 if __name__ == "__main__":
