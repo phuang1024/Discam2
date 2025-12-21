@@ -140,11 +140,30 @@ def process_clip(video_file, anno_file, output_dir, start_i):
             cv2.imshow("a", vis_frame(frame, bboxes[frame_i], gt_box))
             cv2.waitKey(100)
 
-        # Write to output.
-        frame = cv2.resize(frame, None, fx=0.5, fy=0.5)
+        # To save storage, crop frame around GT bbox.
+        center_x = (gt_box[0] + gt_box[2]) / 2
+        center_y = (gt_box[1] + gt_box[3]) / 2
+        crop_box = (
+            max(0, gt_box[0] * 2 - center_x),
+            max(0, gt_box[1] * 2 - center_y),
+            min(frame.shape[1], gt_box[2] * 2 - center_x),
+            min(frame.shape[0], gt_box[3] * 2 - center_y),
+        )
+        crop_box = tuple(map(int, crop_box))
+        frame = frame[
+            crop_box[1] : crop_box[3],
+            crop_box[0] : crop_box[2],
+        ]
+        gt_box = (
+            gt_box[0] - crop_box[0],
+            gt_box[1] - crop_box[1],
+            gt_box[2] - crop_box[0],
+            gt_box[3] - crop_box[1],
+        )
 
+        # Write to output.
         index = start_i + frame_i
-        cv2.imwrite(str(output_dir / f"{index}.jpg"), frame)
+        cv2.imwrite(str(output_dir / f"{index}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         with open(output_dir / f"{index}.json", "w") as fp:
             json.dump({"bbox": gt_box}, fp)
 
