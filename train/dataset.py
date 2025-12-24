@@ -13,44 +13,112 @@ import cv2
 import numpy as np
 
 import torch
+import torchvision.transforms as T
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 
+from constants import *
+from utils import apply_edge_weights, check_bbox_bounds
 
-class DiscamDataset(Dataset):
+
+class VideoDataset:
+    """
+    Reader for a single video.
+    Reads image and corresponding bbox GT by index.
+    """
+
     def __init__(self, dir: Path):
         """
-        dir: Main data directory.
-            Should have subdirs, which each have the image and JSON files.
+        dir: Data directory. Contains image and JSON files.
         """
-        self.subdirs = list(dir.iterdir())
-        print("Found data dirs:", self.subdirs)
+        self.dir = dir
+        print(dir)
 
+        self.length = len(list(self.dir.iterdir())) // 2
+
+    def read(self, index):
+        """
+        return: (image, label)
+            image: tensor float [0-1] (C, H, W)
+            bbox: tensor float (4,)
+        """
+        img_file = self.dir / f"{index}.jpg"
+        bbox_file = self.dir / f"{index}.json"
+
+        img = read_image(str(img_file)).float() / 255.0
+        with open(bbox_file, "r") as f:
+            bbox = json.load(f)["bbox"]
+        bbox = torch.tensor(bbox, dtype=torch.float32)
+
+        return img, bbox
+
+
+class DiscamDataset(Dataset):
+    """
+    Loads chunks (frames of a single video separated by constant step).
+
+    Returns X, Y pairs for the neural network.
+    X is the stack of images.
+    Y is the expected edge weights.
+
+    For each chunk loaded, computes a random offset.
+    The random offset is applied to the *ground truth* bbox of each frame,
+    and crops the frame according to this new bbox.
+    Therefore, the returned chunk will have frame crops offset from the ground truth.
+    Using the random offset, the ground truth edge weights are computed:
+    The edge weights that *should* be output, in order to reverse this random offset.
+    """
+
+    def __init__(self, dir: Path):
+        """
+        dir: Main data directory. Should have subdirs of individual videos.
+        """
+        self.dir = dir
+
+        self.videos = []
         self.total_len = 0
         self.start_inds = []
 
-        for dir in self.subdirs:
+        for dir in self.dir.iterdir():
+            self.videos.append(VideoDataset(dir))
             self.start_inds.append(self.total_len)
-            self.total_len += len(list(dir.iterdir())) // 2
+            self.total_len += self.videos[-1].length
+
+        self.resize = T.Resize(MODEL_INPUT_RES[::-1])
 
     def __len__(self):
         return self.total_len
 
     def __getitem__(self, index):
-        for dir_index in range(len(self.subdirs)):
+        for dir_index in range(len(self.videos)):
             if index >= self.start_inds[dir_index]:
                 break
 
         file_index = index - self.start_inds[dir_index]
-        img_file = self.subdirs[dir_index] / f"{file_index}.jpg"
-        bbox_file = self.subdirs[dir_index] / f"{file_index}.json"
 
-        img = read_image(str(img_file)).float() / 255.0
-        with open(bbox_file, "r") as f:
-            bbox = json.load(f)
-        bbox = bbox["bbox"]
+        rand_edge_weights = torch.rand([4]) * 2 - 1
 
-        return img, bbox
+        img = self.read_crop_image(dir_index, file_index, rand_edge_weights)
+        img = self.resize(img)
+
+        img = img.unsqueeze(0)
+
+        return img, -1 * rand_edge_weights
+
+    def read_crop_image(self, dir_index, file_index, edge_weights):
+        """
+        Read image given by (dir_index, file_index).
+        Apply edge weights to bbox, and crop image with new bbox.
+        """
+        img, bbox = self.videos[dir_index].read(file_index)
+        velocity = (img.shape[1] + img.shape[2]) / 2
+        bbox = apply_edge_weights(bbox, edge_weights, img.shape[2] / img.shape[1], velocity)
+        bbox = check_bbox_bounds(bbox, (img.shape[2], img.shape[1]))
+
+        bbox = list(map(int, bbox))
+        crop = img[:, bbox[1] : bbox[3], bbox[0] : bbox[2]]
+
+        return crop
 
 
 def main():
