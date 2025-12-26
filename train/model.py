@@ -58,7 +58,6 @@ class DiscamModel(nn.Module):
         )
 
     def forward(self, x):
-        print(x.shape)
         b, n, c, h, w = x.shape
 
         # Concatenate N.
