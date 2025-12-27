@@ -6,6 +6,7 @@ Run this file to preview data.
 
 import argparse
 import json
+import math
 import random
 from pathlib import Path
 
@@ -96,6 +97,7 @@ class DiscamDataset(Dataset):
 
         file_index = index - self.start_inds[dir_index]
 
+        # In [-1, 1]
         rand_edge_weights = torch.rand([4]) * 2 - 1
 
         img = self.read_crop_image(dir_index, file_index, rand_edge_weights)
@@ -103,7 +105,24 @@ class DiscamDataset(Dataset):
 
         img = img.unsqueeze(0)
 
-        return img, -1 * rand_edge_weights
+        # In addition to reversing the random edge weights, we want the NN to expand
+        # or contract the bbox based on the magnitude of displacement.
+        # If displacement is large, we want to zoom out, so more is visible, in order to
+        # reposition well. The opposite if displacement is small.
+        # disp: [0, 1]
+        disp = math.hypot(
+            rand_edge_weights[0].item() + rand_edge_weights[2].item(),
+            rand_edge_weights[1].item() + rand_edge_weights[3].item(),
+        ) / math.hypot(2, 2)
+        gt_edge_weights = -1 * rand_edge_weights
+        gt_edge_weights += disp * 0.3
+
+        gt_edge_weights = gt_edge_weights.clamp(-1, 1)
+
+        #print("rand", rand_edge_weights)
+        #print("disp", disp)
+
+        return img, gt_edge_weights
 
     def read_crop_image(self, dir_index, file_index, edge_weights):
         """
@@ -111,6 +130,8 @@ class DiscamDataset(Dataset):
         Apply edge weights to bbox, and crop image with new bbox.
         """
         img, bbox = self.videos[dir_index].read(file_index)
+
+        # Max displacement is roughly equal to image dimension.
         velocity = (img.shape[1] + img.shape[2]) / 2
         bbox = apply_edge_weights(bbox, edge_weights, img.shape[2] / img.shape[1], velocity)
         bbox = check_bbox_bounds(bbox, (img.shape[2], img.shape[1]))
@@ -162,7 +183,7 @@ def main():
     parser.add_argument("dir", type=Path)
     args = parser.parse_args()
 
-    vis_frame(args.dir)
+    vis_dataset(args.dir)
 
 
 if __name__ == "__main__":

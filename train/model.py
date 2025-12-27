@@ -71,4 +71,6 @@ class DiscamModel(nn.Module):
         x = x.view(b, -1)
         x = self.head(x)
 
+        x = torch.tanh(x * MODEL_OUTPUT_TEMP)
+
         return x

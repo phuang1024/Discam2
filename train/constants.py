@@ -9,6 +9,7 @@ MODEL_FRAME_STEP = 5
 MODEL_NUM_FRAMES = 1#5
 # Divisible by 16.
 MODEL_INPUT_RES = (512, 288)
+MODEL_OUTPUT_TEMP = 0.1
 
 ## Training params.
 LR = 1e-4
