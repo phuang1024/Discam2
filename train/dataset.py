@@ -121,22 +121,48 @@ class DiscamDataset(Dataset):
         return crop
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("dir", type=Path)
-    args = parser.parse_args()
-
-    dataset = DiscamDataset(args.dir)
+def vis_frame(dir):
+    """
+    Visualize single image frame and GT bbox.
+    """
+    dataset = VideoDataset(dir)
 
     while True:
-        index = random.randint(0, len(dataset) - 1)
-        img, bbox = dataset[index]
+        index = random.randint(0, dataset.length - 1)
+        img, bbox = dataset.read(index)
+
         img = (img * 255).to(torch.uint8).permute(1, 2, 0).numpy()
         bbox = list(map(int, bbox))
 
         cv2.rectangle(img, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
         cv2.imshow("a", img)
         cv2.waitKey(0)
+
+
+def vis_dataset(dir):
+    """
+    Visualize dataset crop and edge weights.
+    """
+    dataset = DiscamDataset(dir)
+
+    while True:
+        index = random.randint(0, len(dataset) - 1)
+        # img: (N, C, H, W)
+        img, edge_weights = dataset[index]
+        img = img[-1, ...]
+
+        img = (img * 255).to(torch.uint8).permute(1, 2, 0).numpy()
+        print("Edge weights:", edge_weights)
+        cv2.imshow("a", img)
+        cv2.waitKey(0)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("dir", type=Path)
+    args = parser.parse_args()
+
+    vis_frame(args.dir)
 
 
 if __name__ == "__main__":
